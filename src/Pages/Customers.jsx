@@ -13,9 +13,7 @@ function Customers() {
     fetch('https://jsonplaceholder.typicode.com/users')
 
       .then(function (response) {
-
         return response.json()
-
       })
 
       .then(function (data) {
@@ -59,7 +57,6 @@ function Customers() {
     <div>
 
       <h1>Customers</h1>
-
       <h3>Total Customers: {customers.length}</h3>
 
       <input
@@ -67,9 +64,7 @@ function Customers() {
         placeholder="Search customer"
         value={searchText}
         onChange={function (event) {
-
           setSearchText(event.target.value)
-
         }}
       />
 
@@ -79,7 +74,6 @@ function Customers() {
       <table border="1">
 
         <thead>
-
           <tr>
 
             <th>ID</th>
@@ -87,16 +81,12 @@ function Customers() {
             <th>Email</th>
 
           </tr>
-
         </thead>
-
         <tbody>
 
           {
             filteredCustomers.map(function (customer) {
-
               return (
-
                 <tr
                   key={customer.id}
                   onClick={function () {
@@ -105,52 +95,34 @@ function Customers() {
 
                   }}
                 >
-
                   <td>{customer.id}</td>
-
                   <td>{customer.name}</td>
-
                   <td>{customer.email}</td>
-
                 </tr>
 
               )
-
             })
           }
 
         </tbody>
-
       </table>
-
       <br />
 
       {
         selectedCustomer && (
 
           <div>
-
             <h2>Customer Details</h2>
-
             <p>ID: {selectedCustomer.id}</p>
-
             <p>Name: {selectedCustomer.name}</p>
-
             <p>Email: {selectedCustomer.email}</p>
-
             <p>Phone: {selectedCustomer.phone}</p>
-
             <p>Website: {selectedCustomer.website}</p>
-
           </div>
-
         )
       }
-
     </div>
-
   )
-
 }
 
 export default Customers
