@@ -1,15 +1,19 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import Dashboard from './Pages/Dashboard'
 import Customers from './Pages/Customers'
-import Settings from './Pages/Settings'
-import './App.css'
 import Leads from './Pages/Leads'
-
+import Settings from './Pages/Settings'
 import Navbar from './Components/Navbar'
+import './App.css'
+
 function App() {
+
   return (
+
     <BrowserRouter>
+
       <Navbar />
+
       <Routes>
 
         <Route
@@ -23,9 +27,9 @@ function App() {
         />
 
         <Route
-  path="/leads"
-  element={<Leads />}
-/>
+          path="/leads"
+          element={<Leads />}
+        />
 
         <Route
           path="/settings"
@@ -33,9 +37,11 @@ function App() {
         />
 
       </Routes>
+
     </BrowserRouter>
 
   )
+
 }
 
 export default App

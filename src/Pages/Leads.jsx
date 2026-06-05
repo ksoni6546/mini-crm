@@ -6,6 +6,31 @@ function Leads() {
   const [leadName, setLeadName] = useState('')
   const [company, setCompany] = useState('')
   const [status, setStatus] = useState('New')
+  const [editId, setEditId] = useState(null)
+  
+  useEffect(function() {
+
+  let savedLeads = JSON.parse(
+    localStorage.getItem('leads')
+  )
+
+  if(savedLeads) {
+
+    setLeads(savedLeads)
+
+  }
+
+}, [])
+
+useEffect(function() {
+
+  localStorage.setItem(
+    'leads',
+    JSON.stringify(leads)
+  )
+
+}, [leads])
+
 
   function addLead() {
 
@@ -38,7 +63,44 @@ function Leads() {
     setStatus('New')
 
   }
+    function editLead(lead) {
 
+  setLeadName(lead.name)
+  setCompany(lead.company)
+  setStatus(lead.status)
+  setEditId(lead.id)
+
+}
+
+function updateLead() {
+
+  let updatedLeads = leads.map(function(lead) {
+
+    if(lead.id === editId) {
+
+      return {
+
+        ...lead,
+
+        name: leadName,
+        company: company,
+        status: status
+
+      }
+
+    }
+
+    return lead
+
+  })
+
+  setLeads(updatedLeads)
+  setLeadName('')
+  setCompany('')
+  setStatus('New')
+  setEditId(null)
+
+}
   function deleteLead(leadId) {
 
     let updatedLeads = leads.filter(function(lead) {
@@ -112,12 +174,27 @@ function Leads() {
 
         </select>
 
-        <button
-          className="add-btn"
-          onClick={addLead}
-        >
-          Add Lead
-        </button>
+        {
+  editId ? (
+
+    <button
+      className="edit-btn"
+      onClick={updateLead}
+    >
+      Update Lead
+    </button>
+
+  ) : (
+
+    <button
+      className="add-btn"
+      onClick={addLead}
+    >
+      Add Lead
+    </button>
+
+  )
+}
 
       </div>
 
@@ -152,9 +229,32 @@ function Leads() {
 
                   <td>{lead.company}</td>
 
-                  <td>{lead.status}</td>
+                  <td>
+
+  {
+    lead.status === 'New'
+      ? '🔵 New'
+      : lead.status === 'Contacted'
+      ? '🟡 Contacted'
+      : lead.status === 'Qualified'
+      ? '🟢 Qualified'
+      : '🔴 Lost'
+  }
+
+</td>
 
                   <td>
+
+                    <button
+  className="edit-btn"
+  onClick={function() {
+
+    editLead(lead)
+
+  }}
+>
+  Edit
+</button>
 
                     <button
                       className="delete-btn"
