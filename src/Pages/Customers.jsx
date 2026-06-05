@@ -22,7 +22,7 @@ function Customers() {
 
       setCustomers(savedCustomers)
       setLoading(false)
-
+      
       return
 
     }
@@ -61,7 +61,6 @@ function Customers() {
   useEffect(function () {
 
     if (customers.length > 0) {
-
       localStorage.setItem(
         'customers',
         JSON.stringify(customers)
@@ -115,9 +114,7 @@ function Customers() {
   function updateCustomer() {
 
     let updatedCustomers = customers.map(function (customer) {
-
       if (customer.id === editId) {
-
         return {
 
           ...customer,
@@ -133,7 +130,6 @@ function Customers() {
     })
 
     setCustomers(updatedCustomers)
-
     setNewName('')
     setNewEmail('')
     setEditId(null)
@@ -143,7 +139,6 @@ function Customers() {
   function deleteCustomer(customerId) {
 
     let updatedCustomers = customers.filter(function (customer) {
-
       return customer.id !== customerId
 
     })
@@ -207,7 +202,6 @@ function Customers() {
     <div className="customers-page">
 
       <h1>Customer Management</h1>
-
       <h3>Total Customers: {customers.length}</h3>
 
       <div className="form-card">
@@ -322,15 +316,14 @@ function Customers() {
                   }}
                 >
 
-                  <td>{customer.id}</td>
-
-                  <td>{customer.name}</td>
-
-                  <td>{customer.email}</td>
+                <td>{customer.id}</td>
+                <td>{customer.name}</td>
+                <td>{customer.email}</td>
 
                   <td>
 
-  {customer.status === 'Active'
+  {
+  customer.status === 'Active'
     ? '🟢 Active'
     : '🔴 Inactive'}
 
@@ -343,7 +336,6 @@ function Customers() {
                       onClick={function (event) {
 
                         event.stopPropagation()
-
                         editCustomer(customer)
 
                       }}
@@ -355,7 +347,6 @@ function Customers() {
   onClick={function(event) {
 
     event.stopPropagation()
-
     toggleStatus(customer.id)
 
   }}
@@ -366,22 +357,16 @@ function Customers() {
                     <button
                       className="delete-btn"
                       onClick={function (event) {
-
                         event.stopPropagation()
-
                         deleteCustomer(customer.id)
 
                       }}
                     >
                       Delete
                     </button>
-
                   </td>
-
                 </tr>
-
               )
-
             })
           }
 
