@@ -58,7 +58,7 @@ return (
 <div className="page-header">
 <div className="page-header-left">
 <h1>Dashboard</h1>
-<p>Welcome back! Here's what's happening with your CRM.</p>
+<p>Welcome back!</p>
 </div>
 <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
 📅 {new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
