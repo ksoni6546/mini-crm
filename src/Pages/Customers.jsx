@@ -7,24 +7,53 @@ function Customers() {
   const [error, setError] = useState('')
   const [searchText, setSearchText] = useState('')
   const [selectedCustomer, setSelectedCustomer] = useState(null)
+  const [activityLog, setActivityLog] = useState([])
   const [newName, setNewName] = useState('')
   const [newEmail, setNewEmail] = useState('')
+  const [newPhone, setNewPhone] = useState('')
+  const [newCompany, setNewCompany] = useState('')
   const [newStatus, setNewStatus] = useState('Active')
+  const [newNote, setNewNote] = useState('')
   const [editId, setEditId] = useState(null)
 
-  useEffect(function () {
+  function normalizeCustomers(list) {
+    return list.map(function (customer) {
+      return {
+        ...customer,
+        activity: customer.activity || []
+      }
+    })
+  }
 
+  function loadSavedCustomers() {
     let savedCustomers = JSON.parse(
       localStorage.getItem('customers')
     )
 
-    if (savedCustomers && savedCustomers.length > 0) {
+    if (Array.isArray(savedCustomers)) {
+      return normalizeCustomers(savedCustomers)
+    }
 
+    return null
+  }
+
+  useEffect(function () {
+
+    let savedLogs = JSON.parse(
+      localStorage.getItem('activityLog')
+    ) || []
+
+    setActivityLog(savedLogs)
+
+    let savedCustomers = loadSavedCustomers()
+
+    if (savedCustomers !== null) {
       setCustomers(savedCustomers)
       setLoading(false)
-      
-      return
 
+      if (savedCustomers.length > 0) {
+        return
+      }
     }
 
     fetch('https://jsonplaceholder.typicode.com/users')
@@ -39,7 +68,10 @@ function Customers() {
 
           return {
             ...customer,
-            status: 'Active'
+            phone: customer.phone || '',
+            company: customer.company?.name || '',
+            status: 'Active',
+            activity: []
           }
 
         })
@@ -58,17 +90,56 @@ function Customers() {
 
   }, [])
 
+  // listen for cross-component updates (conversion, deletes) and reload data
   useEffect(function () {
 
-    if (customers.length > 0) {
-      localStorage.setItem(
-        'customers',
-        JSON.stringify(customers)
-      )
+    function handleStorageUpdate() {
+
+      let savedLogs = JSON.parse(
+        localStorage.getItem('activityLog')
+      ) || []
+
+      setActivityLog(savedLogs)
+
+      let savedCustomers = loadSavedCustomers() || []
+
+      setCustomers(savedCustomers)
+
+      setSelectedCustomer(function (prev) {
+        if (!prev) return prev
+        let found = savedCustomers.find(function (x) {
+          return x.id === prev.id
+        })
+        return found || prev
+      })
 
     }
 
-  }, [customers])
+    window.addEventListener('crm:storageUpdated', handleStorageUpdate)
+    window.addEventListener('storage', handleStorageUpdate)
+
+    return function () {
+      window.removeEventListener('crm:storageUpdated', handleStorageUpdate)
+      window.removeEventListener('storage', handleStorageUpdate)
+    }
+
+  }, [])
+
+  useEffect(function () {
+
+    // avoid overwriting the saved customer list while the page is still loading
+    if (!loading) {
+      try {
+        localStorage.setItem(
+          'customers',
+          JSON.stringify(customers)
+        )
+      } catch (e) {
+        // ignore storage errors
+      }
+    }
+
+  }, [customers, loading])
 
   function addCustomer() {
 
@@ -87,18 +158,34 @@ function Customers() {
       id: Date.now(),
       name: newName,
       email: newEmail,
+      phone: newPhone,
+      company: newCompany,
+      note: newNote,
       status: newStatus
 
     }
+
+    // initialize per-customer activity
+    newCustomer.activity = []
 
     setCustomers([
       ...customers,
       newCustomer
     ])
 
-    setNewName('')
-    setNewEmail('')
-    setNewStatus('Active')
+    // persist immediately and notify other components/tabs
+    try {
+      let next = [
+        ...customers,
+        newCustomer
+      ]
+      localStorage.setItem('customers', JSON.stringify(next))
+      window.dispatchEvent(new Event('crm:storageUpdated'))
+    } catch (e) {
+      // ignore
+    }
+
+    clearForm()
 
   }
 
@@ -106,7 +193,10 @@ function Customers() {
 
     setNewName(customer.name)
     setNewEmail(customer.email)
+    setNewPhone(customer.phone || '')
+    setNewCompany(customer.company || '')
     setNewStatus(customer.status)
+    setNewNote(customer.note || '')
     setEditId(customer.id)
 
   }
@@ -114,13 +204,19 @@ function Customers() {
   function updateCustomer() {
 
     let updatedCustomers = customers.map(function (customer) {
+
       if (customer.id === editId) {
+
         return {
 
           ...customer,
           name: newName,
           email: newEmail,
+          phone: newPhone,
+          company: newCompany,
+          note: newNote,
           status: newStatus
+
         }
 
       }
@@ -130,15 +226,23 @@ function Customers() {
     })
 
     setCustomers(updatedCustomers)
-    setNewName('')
-    setNewEmail('')
+
+    try {
+      localStorage.setItem('customers', JSON.stringify(updatedCustomers))
+      window.dispatchEvent(new Event('crm:storageUpdated'))
+    } catch (e) {}
+
+    clearForm()
+
     setEditId(null)
+    setNewNote('')
 
   }
 
   function deleteCustomer(customerId) {
 
     let updatedCustomers = customers.filter(function (customer) {
+
       return customer.id !== customerId
 
     })
@@ -153,33 +257,55 @@ function Customers() {
       setSelectedCustomer(null)
 
     }
+
+    try {
+      localStorage.setItem('customers', JSON.stringify(updatedCustomers))
+      window.dispatchEvent(new Event('crm:storageUpdated'))
+    } catch (e) {}
+
   }
+
   function toggleStatus(customerId) {
 
-  let updatedCustomers = customers.map(function(customer) {
+    let updatedCustomers = customers.map(function (customer) {
 
-    if(customer.id === customerId) {
+      if (customer.id === customerId) {
 
-      return {
+        return {
 
-        ...customer,
+          ...customer,
 
-        status:
-          customer.status === 'Active'
-            ? 'Inactive'
-            : 'Active'
+          status:
+            customer.status === 'Active'
+              ? 'Inactive'
+              : 'Active'
+
+        }
 
       }
 
-    }
+      return customer
 
-    return customer
+    })
 
-  })
+    setCustomers(updatedCustomers)
 
-  setCustomers(updatedCustomers)
+    try {
+      localStorage.setItem('customers', JSON.stringify(updatedCustomers))
+      window.dispatchEvent(new Event('crm:storageUpdated'))
+    } catch (e) {}
 
-}
+  }
+
+  function clearForm() {
+
+    setNewName('')
+    setNewEmail('')
+    setNewPhone('')
+    setNewCompany('')
+    setNewStatus('Active')
+
+  }
 
   if (loading) {
     return <h2>Loading Customers...</h2>
@@ -202,6 +328,7 @@ function Customers() {
     <div className="customers-page">
 
       <h1>Customer Management</h1>
+
       <h3>Total Customers: {customers.length}</h3>
 
       <div className="form-card">
@@ -228,24 +355,48 @@ function Customers() {
           }}
         />
 
-        <select
-  value={newStatus}
+        <input
+          type="text"
+          placeholder="Enter Phone"
+          value={newPhone}
+          onChange={function (event) {
+            setNewPhone(event.target.value)
+          }}
+        />
+
+        <input
+          type="text"
+          placeholder="Enter Company"
+          value={newCompany}
+          onChange={function (event) {
+            setNewCompany(event.target.value)
+          }}
+        />
+
+        <textarea
+  placeholder="Enter Notes"
+  value={newNote}
   onChange={function(event) {
-
-    setNewStatus(event.target.value)
-
+    setNewNote(event.target.value)
   }}
->
+/>
 
-  <option value="Active">
-    Active
-  </option>
+        <select
+          value={newStatus}
+          onChange={function (event) {
+            setNewStatus(event.target.value)
+          }}
+        >
 
-  <option value="Inactive">
-    Inactive
-  </option>
+          <option value="Active">
+            Active
+          </option>
 
-</select>
+          <option value="Inactive">
+            Inactive
+          </option>
+
+        </select>
 
         {
           editId ? (
@@ -271,6 +422,28 @@ function Customers() {
 
       </div>
 
+      <div className="activity-card">
+
+        <h2>Recent Activity</h2>
+
+        <ul>
+          {
+            activityLog.slice(0, 5).map(function (log) {
+
+              return (
+
+                <li key={log.id}>
+                  {log.time} - {log.message}
+                </li>
+
+              )
+
+            })
+          }
+        </ul>
+
+      </div>
+
       <div className="search-card">
 
         <input
@@ -293,6 +466,8 @@ function Customers() {
             <th>ID</th>
             <th>Name</th>
             <th>Email</th>
+            <th>Phone</th>
+            <th>Company</th>
             <th>Status</th>
             <th>Action</th>
 
@@ -310,24 +485,23 @@ function Customers() {
                 <tr
                   key={customer.id}
                   onClick={function () {
-
                     setSelectedCustomer(customer)
-
                   }}
                 >
 
-                <td>{customer.id}</td>
-                <td>{customer.name}</td>
-                <td>{customer.email}</td>
+                  <td>{customer.id}</td>
+                  <td>{customer.name}</td>
+                  <td>{customer.email}</td>
+                  <td>{customer.phone}</td>
+                  <td>{customer.company}</td>
 
                   <td>
-
-  {
-  customer.status === 'Active'
-    ? '🟢 Active'
-    : '🔴 Inactive'}
-
-</td>
+                    {
+                      customer.status === 'Active'
+                        ? '🟢 Active'
+                        : '🔴 Inactive'
+                    }
+                  </td>
 
                   <td>
 
@@ -344,19 +518,20 @@ function Customers() {
                     </button>
 
                     <button
-  onClick={function(event) {
+                      onClick={function (event) {
 
-    event.stopPropagation()
-    toggleStatus(customer.id)
+                        event.stopPropagation()
+                        toggleStatus(customer.id)
 
-  }}
->
-  Toggle Status
-</button>
+                      }}
+                    >
+                      Toggle
+                    </button>
 
                     <button
                       className="delete-btn"
                       onClick={function (event) {
+
                         event.stopPropagation()
                         deleteCustomer(customer.id)
 
@@ -364,9 +539,13 @@ function Customers() {
                     >
                       Delete
                     </button>
+
                   </td>
+
                 </tr>
+
               )
+
             })
           }
 
@@ -394,16 +573,38 @@ function Customers() {
             </p>
 
             <p>
-              <strong>Status:</strong> {selectedCustomer.status}
-            </p>
-
-            <p>
               <strong>Phone:</strong> {selectedCustomer.phone || 'N/A'}
             </p>
 
             <p>
-              <strong>Website:</strong> {selectedCustomer.website || 'N/A'}
+              <strong>Company:</strong> {selectedCustomer.company || 'N/A'}
             </p>
+
+            <p>
+  <strong>Notes:</strong>
+  {selectedCustomer.note || 'No Notes'}
+</p>
+
+            <p>
+              <strong>Status:</strong> {selectedCustomer.status}
+            </p>
+
+            {
+              (selectedCustomer.activity && selectedCustomer.activity.length > 0) && (
+
+                <div style={{ marginTop: 8 }}>
+                  <h3>Activity</h3>
+                  <ul>
+                    {selectedCustomer.activity.map(function (a) {
+                      return (
+                        <li key={a.id}>{a.time} - {a.message}</li>
+                      )
+                    })}
+                  </ul>
+                </div>
+
+              )
+            }
 
           </div>
 

@@ -4,6 +4,8 @@ function Leads() {
 
   const [leads, setLeads] = useState([])
   const [leadName, setLeadName] = useState('')
+  const [leadEmail, setLeadEmail] = useState('')
+  const [leadPhone, setLeadPhone] = useState('')
   const [company, setCompany] = useState('')
   const [status, setStatus] = useState('New')
   const [editId, setEditId] = useState(null)
@@ -35,15 +37,19 @@ function Leads() {
 
     if (
       leadName.trim() === '' ||
+      leadEmail.trim() === '' ||
+      leadPhone.trim() === '' ||
       company.trim() === ''
     ) {
-      alert('Please enter lead name and company')
+      alert('Please enter lead name, email, phone and company')
       return
     }
 
     let newLead = {
       id: Date.now(),
       name: leadName,
+      email: leadEmail,
+      phone: leadPhone,
       company: company,
       status: status
     }
@@ -54,6 +60,8 @@ function Leads() {
     ])
 
     setLeadName('')
+    setLeadEmail('')
+    setLeadPhone('')
     setCompany('')
     setStatus('New')
   }
@@ -61,6 +69,8 @@ function Leads() {
   function editLead(lead) {
 
     setLeadName(lead.name)
+    setLeadEmail(lead.email || '')
+    setLeadPhone(lead.phone || '')
     setCompany(lead.company)
     setStatus(lead.status)
 
@@ -76,6 +86,7 @@ function Leads() {
         return {
           ...lead,
           name: leadName,
+          email: leadEmail,
           company: company,
           status: status
         }
@@ -89,6 +100,8 @@ function Leads() {
     setLeads(updatedLeads)
 
     setLeadName('')
+    setLeadEmail('')
+    setLeadPhone('')
     setCompany('')
     setStatus('New')
     setEditId(null)
@@ -111,6 +124,76 @@ function Leads() {
       setSelectedLead(null)
     }
   }
+
+  function convertToCustomer(lead) {
+
+  let customers =
+    JSON.parse(
+      localStorage.getItem('customers')
+    ) || []
+
+  let newCustomer = {
+
+    id: Date.now(),
+    name: lead.name,
+    email: '',
+    phone: '',
+    company: lead.company,
+    status: 'Active'
+
+  }
+
+  // attach per-customer activity history
+  newCustomer.activity = [
+    {
+      id: Date.now() + 1,
+      type: 'Conversion',
+      message: `Converted lead ${lead.name} to customer ${newCustomer.name}`,
+      time: new Date().toLocaleString()
+    }
+  ]
+
+  customers.push(newCustomer)
+
+  localStorage.setItem(
+    'customers',
+    JSON.stringify(customers)
+  )
+
+  console.log('Leads: saved customers to localStorage', customers)
+
+  // add an activity log entry so Customers/Dashboard can show recent actions
+  let activityLog =
+    JSON.parse(
+      localStorage.getItem('activityLog')
+    ) || []
+
+  activityLog.unshift({
+    id: Date.now(),
+    type: 'Conversion',
+    message: `Converted lead ${lead.name} to customer ${newCustomer.name}`,
+    time: new Date().toLocaleString()
+  })
+
+  localStorage.setItem(
+    'activityLog',
+    JSON.stringify(activityLog)
+  )
+
+  console.log('Leads: saved activityLog to localStorage', activityLog)
+
+  // notify other parts of the app in this window to refresh their data
+  try {
+    window.dispatchEvent(new Event('crm:storageUpdated'))
+  } catch (e) {
+    // ignore in non-browser or older environments
+  }
+
+  deleteLead(lead.id)
+
+  alert('Lead converted to customer')
+
+}
 
   let filteredLeads = leads.filter(function(lead) {
 
@@ -138,6 +221,24 @@ function Leads() {
           value={leadName}
           onChange={function(event) {
             setLeadName(event.target.value)
+          }}
+        />
+
+        <input
+          type="email"
+          placeholder="Lead Email"
+          value={leadEmail}
+          onChange={function(event) {
+            setLeadEmail(event.target.value)
+          }}
+        />
+
+        <input
+          type="text"
+          placeholder="Phone Number"
+          value={leadPhone}
+          onChange={function(event) {
+            setLeadPhone(event.target.value)
           }}
         />
 
@@ -207,6 +308,8 @@ function Leads() {
 
             <th>ID</th>
             <th>Name</th>
+            <th>Email</th>
+            <th>Phone</th>
             <th>Company</th>
             <th>Status</th>
             <th>Action</th>
@@ -232,7 +335,8 @@ function Leads() {
                   <td>{lead.id}</td>
 
                   <td>{lead.name}</td>
-
+                  <td>{lead.email || 'N/A'}</td>
+                  <td>{lead.phone || 'N/A'}</td>
                   <td>{lead.company}</td>
 
                   <td>
@@ -259,7 +363,18 @@ function Leads() {
                       }}
                     >
                       Edit
-                    </button>
+                    </button>'
+                    
+                    <button
+  className="add-btn"
+  onClick={function() {
+
+    convertToCustomer(lead)
+
+  }}
+>
+Convert
+</button>
 
                     <button
                       className="delete-btn"
@@ -299,6 +414,14 @@ function Leads() {
 
             <p>
               <strong>Name:</strong> {selectedLead.name}
+            </p>
+
+            <p>
+              <strong>Email:</strong> {selectedLead.email || 'N/A'}
+            </p>
+
+            <p>
+              <strong>Phone:</strong> {selectedLead.phone || 'N/A'}
             </p>
 
             <p>

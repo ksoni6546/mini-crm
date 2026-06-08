@@ -3,44 +3,53 @@ import Dashboard from './Pages/Dashboard'
 import Customers from './Pages/Customers'
 import Leads from './Pages/Leads'
 import Settings from './Pages/Settings'
-import Navbar from './Components/Navbar'
+import Sidebar from './Components/Sidebar'
 import './App.css'
 
 function App() {
 
-  return (
+return (
 
-    <BrowserRouter>
+<BrowserRouter>
 
-      <Navbar />
+<div className="app-layout">
 
-      <Routes>
+{/* Sidebar stays on left, main content on right */}
+<Sidebar />
 
-        <Route
-          path="/"
-          element={<Dashboard />}
-        />
+<main className="main-content">
 
-        <Route
-          path="/customers"
-          element={<Customers />}
-        />
+<Routes>
 
-        <Route
-          path="/leads"
-          element={<Leads />}
-        />
+<Route
+path="/"
+element={<Dashboard />}
+/>
 
-        <Route
-          path="/settings"
-          element={<Settings />}
-        />
+<Route
+path="/customers"
+element={<Customers />}
+/>
 
-      </Routes>
+<Route
+path="/leads"
+element={<Leads />}
+/>
 
-    </BrowserRouter>
+<Route
+path="/settings"
+element={<Settings />}
+/>
 
-  )
+</Routes>
+
+</main>
+
+</div>
+
+</BrowserRouter>
+
+)
 
 }
 
