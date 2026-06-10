@@ -1,501 +1,304 @@
-import { useState, useEffect } from 'react'
-
-function Leads() {
-
-const [leads, setLeads] = useState([])
-const [leadName, setLeadName] = useState('')
-const [leadEmail, setLeadEmail] = useState('')
-const [leadPhone, setLeadPhone] = useState('')
-const [company, setCompany] = useState('')
-const [status, setStatus] = useState('New')
-const [leadSource, setLeadSource] = useState('Website')
-const [editId, setEditId] = useState(null)
-const [searchText, setSearchText] = useState('')
-const [selectedLead, setSelectedLead] = useState(null)
-const [showForm, setShowForm] = useState(false)
-const [filterStatus, setFilterStatus] = useState('All')
-
-// Load leads from localStorage on first render
-useEffect(function () {
-let saved = JSON.parse(localStorage.getItem('leads'))
-if (saved) {
-setLeads(saved)
-}
-}, [])
-
-// Save leads to localStorage whenever they change
-useEffect(function () {
-localStorage.setItem('leads', JSON.stringify(leads))
-window.dispatchEvent(new Event('crm:storageUpdated'))
-}, [leads])
-
-// --- CRUD Functions ---
-
-function addLead() {
-
-if (
-leadName.trim() === '' ||
-leadEmail.trim() === '' ||
-company.trim() === ''
-) {
-alert('Please enter lead name, email and company')
-return
-}
-
-let newLead = {
-id: Date.now(),
-name: leadName,
-email: leadEmail,
-phone: leadPhone,
-company: company,
-status: status,
-source: leadSource,
-createdAt: new Date().toLocaleDateString('en-IN')
-}
-
-setLeads([...leads, newLead])
-clearForm()
-setShowForm(false)
-
-}
-
-function editLead(lead) {
-setLeadName(lead.name)
-setLeadEmail(lead.email || '')
-setLeadPhone(lead.phone || '')
-setCompany(lead.company)
-setStatus(lead.status)
-setLeadSource(lead.source || 'Website')
-setEditId(lead.id)
-setShowForm(true)
-}
-
-function updateLead() {
-
-let updated = leads.map(function (lead) {
-if (lead.id === editId) {
-return {
-...lead,
-name: leadName,
-email: leadEmail,
-phone: leadPhone,
-company: company,
-status: status,
-source: leadSource
-}
-}
-return lead
-})
-
-setLeads(updated)
-clearForm()
-setEditId(null)
-setShowForm(false)
-
-}
-
-function deleteLead(leadId) {
-
-let updated = leads.filter(function (lead) {
-return lead.id !== leadId
-})
-
-setLeads(updated)
-
-if (selectedLead && selectedLead.id === leadId) {
-setSelectedLead(null)
-}
-
-}
-
-function convertToCustomer(lead) {
-
-let customers = JSON.parse(localStorage.getItem('customers')) || []
-
-let newCustomer = {
-id: Date.now(),
-name: lead.name,
-email: lead.email || '',
-phone: lead.phone || '',
-company: lead.company,
-status: 'Active',
-priority: 'Medium',
-followUpDate: '',
-note: 'Converted from lead. Source: ' + (lead.source || 'Unknown'),
-activity: [
-{
-id: Date.now() + 1,
-type: 'Conversion',
-message: 'Converted from lead to customer',
-time: new Date().toLocaleString()
-}
-]
-}
-
-customers.push(newCustomer)
-localStorage.setItem('customers', JSON.stringify(customers))
-
-// Add to global activity log
-let activityLog = JSON.parse(localStorage.getItem('activityLog')) || []
-activityLog.unshift({
-id: Date.now(),
-type: 'Conversion',
-message: 'Converted lead ' + lead.name + ' to customer',
-time: new Date().toLocaleString()
-})
-localStorage.setItem('activityLog', JSON.stringify(activityLog))
-
-window.dispatchEvent(new Event('crm:storageUpdated'))
-
-deleteLead(lead.id)
-alert(lead.name + ' has been converted to a customer!')
-
-}
-
-function clearForm() {
-setLeadName('')
-setLeadEmail('')
-setLeadPhone('')
-setCompany('')
-setStatus('New')
-setLeadSource('Website')
-}
-
-// Badge color for lead status
-function statusBadge(s) {
-if (s === 'New') return 'badge badge-new'
-if (s === 'Contacted') return 'badge badge-contacted'
-if (s === 'Qualified') return 'badge badge-qualified'
-return 'badge badge-lost'
-}
-
-// Filter by status tab + search text
-let filteredLeads = leads.filter(function (lead) {
-
-let matchesSearch = lead.name.toLowerCase().includes(searchText.toLowerCase()) ||
-lead.company.toLowerCase().includes(searchText.toLowerCase())
-
-let matchesFilter = filterStatus === 'All' || lead.status === filterStatus
-
-return matchesSearch && matchesFilter
-
-})
-
-// Count per status for tab badges
-function countByStatus(s) {
-return leads.filter(function (l) { return l.status === s }).length
-}
-
-return (
-
-<div className="leads-page">
-
-{/* Page Header */}
-<div className="page-header">
-<div className="page-header-left">
-<h1>Leads</h1>
-<p>{leads.length} total leads in pipeline</p>
-</div>
-<button
-className="btn btn-primary"
-onClick={function () {
-clearForm()
-setEditId(null)
-setShowForm(!showForm)
-}}
->
-{showForm ? '✕ Cancel' : '+ Add Lead'}
-</button>
-</div>
-
-{/* Add / Edit Form */}
-{showForm && (
-<div className="card mb-20">
-<div className="card-header">
-<span className="card-title">
-{editId ? '✏️ Update Lead' : '➕ New Lead'}
-</span>
-</div>
-<div className="card-body">
-
-<div className="form-grid">
-
-<div className="form-group">
-<label className="form-label">Lead Name *</label>
-<input
-className="form-input"
-type="text"
-placeholder="e.g. Kartik Soni"
-value={leadName}
-onChange={function (e) { setLeadName(e.target.value) }}
-/>
-</div>
-
-<div className="form-group">
-<label className="form-label">Email Address *</label>
-<input
-className="form-input"
-type="email"
-placeholder="e.g. kartik@gmail.com"
-value={leadEmail}
-onChange={function (e) { setLeadEmail(e.target.value) }}
-/>
-</div>
-
-<div className="form-group">
-<label className="form-label">Phone Number</label>
-<input
-className="form-input"
-type="text"
-placeholder="e.g. +91 9876500000"
-value={leadPhone}
-onChange={function (e) { setLeadPhone(e.target.value) }}
-/>
-</div>
-
-<div className="form-group">
-<label className="form-label">Company *</label>
-<input
-className="form-input"
-type="text"
-placeholder="e.g. In Time Tec"
-value={company}
-onChange={function (e) { setCompany(e.target.value) }}
-/>
-</div>
-
-<div className="form-group">
-<label className="form-label">Lead Status</label>
-<select
-className="form-select"
-value={status}
-onChange={function (e) { setStatus(e.target.value) }}
->
-<option value="New">New</option>
-<option value="Contacted">Contacted</option>
-<option value="Qualified">Qualified</option>
-<option value="Lost">Lost</option>
-</select>
-</div>
-
-<div className="form-group">
-<label className="form-label">Lead Source</label>
-<select
-className="form-select"
-value={leadSource}
-onChange={function (e) { setLeadSource(e.target.value) }}
->
-<option value="Website">Website</option>
-<option value="Referral">Referral</option>
-<option value="Social Media">Social Media</option>
-<option value="Cold Call">Cold Call</option>
-<option value="Email Campaign">Email Campaign</option>
-<option value="Trade Show">Trade Show</option>
-<option value="Other">Other</option>
-</select>
-</div>
-
-</div>
-
-<div style={{ marginTop: 8 }}>
-{editId ? (
-<button className="btn btn-warning" onClick={updateLead}>
-✏️ Update Lead
-</button>
-) : (
-<button className="btn btn-primary" onClick={addLead}>
-➕ Add Lead
-</button>
-)}
-</div>
-
-</div>
-</div>
-)}
-
-{/* Status Filter Tabs */}
-<div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
-
-{['All', 'New', 'Contacted', 'Qualified', 'Lost'].map(function (tab) {
-return (
-<button
-key={tab}
-onClick={function () { setFilterStatus(tab) }}
-style={{
-padding: '7px 16px',
-borderRadius: 8,
-border: 'none',
-fontSize: 13,
-fontWeight: 600,
-cursor: 'pointer',
-fontFamily: 'var(--font-main)',
-background: filterStatus === tab ? 'var(--primary)' : 'white',
-color: filterStatus === tab ? 'white' : 'var(--text-secondary)',
-boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-transition: 'all 0.15s ease'
-}}
->
-{tab} {tab !== 'All' ? '(' + countByStatus(tab) + ')' : '(' + leads.length + ')'}
-</button>
-)
-})}
-
-</div>
-
-{/* Leads Table */}
-<div className="card">
-
-<div className="card-header">
-<span className="card-title">Lead Pipeline</span>
-<div className="search-bar">
-<input
-type="text"
-placeholder="Search by name or company..."
-value={searchText}
-onChange={function (e) { setSearchText(e.target.value) }}
-/>
-</div>
-</div>
-
-<div className="table-wrapper">
-<table>
-<thead>
-<tr>
-<th>#</th>
-<th>Name</th>
-<th>Email</th>
-<th>Phone</th>
-<th>Company</th>
-<th>Source</th>
-<th>Status</th>
-<th>Actions</th>
-</tr>
-</thead>
-<tbody>
-{filteredLeads.length === 0 ? (
-<tr>
-<td colSpan="8" style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>
-No leads found
-</td>
-</tr>
-) : (
-filteredLeads.map(function (lead, index) {
-return (
-<tr
-key={lead.id}
-onClick={function () { setSelectedLead(lead) }}
->
-<td style={{ color: 'var(--text-muted)', fontSize: 13 }}>{index + 1}</td>
-<td style={{ fontWeight: 600 }}>{lead.name}</td>
-<td style={{ color: 'var(--text-secondary)' }}>{lead.email || '—'}</td>
-<td style={{ color: 'var(--text-secondary)' }}>{lead.phone || '—'}</td>
-<td>{lead.company}</td>
-<td>
-<span style={{
-fontSize: 12,
-padding: '2px 8px',
-borderRadius: 12,
-background: 'var(--primary-light)',
-color: 'var(--primary)',
-fontWeight: 600
-}}>
-{lead.source || 'Website'}
-</span>
-</td>
-<td>
-<span className={statusBadge(lead.status)}>
-{lead.status}
-</span>
-</td>
-<td onClick={function (e) { e.stopPropagation() }}>
-<button
-className="edit-btn"
-onClick={function () { editLead(lead) }}
->
-Edit
-</button>
-<button
-className="edit-btn"
-style={{ background: '#16a34a', marginRight: 6 }}
-onClick={function () { convertToCustomer(lead) }}
->
-Convert
-</button>
-<button
-className="delete-btn"
-onClick={function () { deleteLead(lead.id) }}
->
-Delete
-</button>
-</td>
-</tr>
-)
-})
-)}
-</tbody>
-</table>
-</div>
-
-</div>
-
-{/* Lead Details Panel */}
-{selectedLead && (
-<div className="card" style={{ marginTop: 20 }}>
-<div className="card-header">
-<span className="card-title">🎯 {selectedLead.name} — Lead Details</span>
-<button
-className="btn btn-ghost btn-sm"
-onClick={function () { setSelectedLead(null) }}
->
-✕ Close
-</button>
-</div>
-<div className="card-body">
-
-<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-
-<div>
-<div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>Email</div>
-<div style={{ fontWeight: 500 }}>{selectedLead.email || '—'}</div>
-</div>
-
-<div>
-<div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>Phone</div>
-<div style={{ fontWeight: 500 }}>{selectedLead.phone || '—'}</div>
-</div>
-
-<div>
-<div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>Company</div>
-<div style={{ fontWeight: 500 }}>{selectedLead.company}</div>
-</div>
-
-<div>
-<div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>Lead Source</div>
-<div style={{ fontWeight: 500 }}>{selectedLead.source || 'Website'}</div>
-</div>
-
-<div>
-<div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>Status</div>
-<span className={statusBadge(selectedLead.status)}>
-{selectedLead.status}
-</span>
-</div>
-
-<div>
-<div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>Created</div>
-<div style={{ fontWeight: 500 }}>{selectedLead.createdAt || '—'}</div>
-</div>
-
-</div>
-
-</div>
-</div>
-)}
-
-</div>
-
-)
-
-}
-
-export default Leads
+import React, { useState } from 'react';
+import { useLocalStorage } from '../hooks/useLocalStorage';
+import { useSettings } from '../hooks/useSettings';
+import { useToast } from '../contexts/ToastContext';
+import { useConfirm } from '../hooks/useConfirm';
+import { logActivity } from '../utils/activityLogger';
+
+import PageHeader from '../Components/PageHeader';
+import SearchBar from '../Components/SearchBar';
+import FilterTabs from '../Components/FilterTabs';
+import DataTable from '../Components/DataTable';
+import FormModal from '../Components/FormModal';
+import Badge from '../Components/Badge';
+import ConfirmDialog from '../Components/ConfirmDialog';
+
+const Leads = () => {
+  const [leads, setLeads] = useLocalStorage('leads', []);
+  const [customers, setCustomers] = useLocalStorage('customers', []);
+  const [settings] = useSettings();
+  const toast = useToast();
+  const confirmDialog = useConfirm();
+
+  const [searchText, setSearchText] = useState('');
+  const [filterStatus, setFilterStatus] = useState('All');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editId, setEditId] = useState(null);
+  const [selectedLead, setSelectedLead] = useState(null);
+
+  // Form state
+  const [formData, setFormData] = useState({
+    name: '', email: '', phone: '', company: '', 
+    status: 'New', 
+    source: settings.defaultLeadSource || 'Website'
+  });
+
+  const filteredLeads = leads.filter(l => {
+    const matchesSearch = l.name.toLowerCase().includes(searchText.toLowerCase()) || 
+                          (l.company && l.company.toLowerCase().includes(searchText.toLowerCase()));
+    const matchesStatus = filterStatus === 'All' || l.status === filterStatus;
+    return matchesSearch && matchesStatus;
+  });
+
+  // Actions
+  const handleOpenForm = (lead = null) => {
+    if (lead) {
+      setFormData({ ...lead });
+      setEditId(lead.id);
+    } else {
+      setFormData({
+        name: '', email: '', phone: '', company: '', 
+        status: 'New', 
+        source: settings.defaultLeadSource || 'Website'
+      });
+      setEditId(null);
+    }
+    setIsModalOpen(true);
+  };
+
+  const handleSave = () => {
+    if (!formData.name.trim() || !formData.company.trim()) {
+      toast.warning('Name and Company are required.');
+      return;
+    }
+
+    if (editId) {
+      const updated = leads.map(l => l.id === editId ? { ...formData, id: editId, createdAt: l.createdAt } : l);
+      setLeads(updated);
+      logActivity('Lead', `Updated lead: ${formData.name}`);
+      toast.success('Lead updated successfully.');
+      if (selectedLead?.id === editId) setSelectedLead({ ...formData, id: editId });
+    } else {
+      const newLead = { ...formData, id: Date.now(), createdAt: new Date().toLocaleDateString('en-IN') };
+      setLeads([...leads, newLead]);
+      logActivity('Lead', `Added new lead: ${formData.name} from ${formData.source}`);
+      toast.success('Lead added successfully.');
+    }
+    setIsModalOpen(false);
+  };
+
+  const handleDelete = (id, name) => {
+    confirmDialog.confirm({
+      title: 'Delete Lead',
+      message: `Are you sure you want to delete ${name}? This action cannot be undone.`,
+      confirmText: 'Delete Lead',
+      onConfirm: () => {
+        setLeads(leads.filter(l => l.id !== id));
+        logActivity('Lead', `Deleted lead: ${name}`);
+        toast.info('Lead deleted.');
+        if (selectedLead?.id === id) setSelectedLead(null);
+      }
+    });
+  };
+
+  const handleConvertToCustomer = (lead) => {
+    confirmDialog.confirm({
+      title: 'Convert to Customer',
+      message: `Are you sure you want to convert ${lead.name} into an Active Customer? They will be removed from Leads.`,
+      confirmText: 'Convert',
+      isDanger: false,
+      onConfirm: () => {
+        const newCustomer = {
+          id: Date.now(),
+          name: lead.name,
+          email: lead.email || '',
+          phone: lead.phone || '',
+          company: lead.company,
+          status: 'Active',
+          priority: 'Medium',
+          followUpDate: '',
+          note: `Converted from lead. Source: ${lead.source || 'Unknown'}`,
+        };
+        
+        setCustomers([...customers, newCustomer]);
+        setLeads(leads.filter(l => l.id !== lead.id));
+        
+        logActivity('Customer', `Converted lead ${lead.name} to customer`);
+        toast.success(`${lead.name} converted to customer!`);
+        if (selectedLead?.id === lead.id) setSelectedLead(null);
+      }
+    });
+  };
+
+  const exportToCSV = () => {
+    if (leads.length === 0) {
+      toast.warning('No leads to export.');
+      return;
+    }
+    const headers = ['Name', 'Email', 'Phone', 'Company', 'Source', 'Status', 'Created Date'];
+    const rows = leads.map(l => [
+      `"${l.name}"`, `"${l.email || ''}"`, `"${l.phone || ''}"`, `"${l.company}"`, 
+      `"${l.source}"`, `"${l.status}"`, `"${l.createdAt}"`
+    ].join(','));
+    const csv = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'leads.csv'; a.click();
+    URL.revokeObjectURL(url);
+    toast.success('Export downloaded.');
+  };
+
+  // Table config
+  const columns = [
+    { key: 'name', label: 'Lead', render: (val, row) => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--warning-light)', color: 'var(--warning)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12px' }}>
+            {val.charAt(0).toUpperCase()}
+          </div>
+          <div>
+            <div style={{ fontWeight: 600 }}>{val}</div>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{row.company}</div>
+          </div>
+        </div>
+      )
+    },
+    { key: 'contact', label: 'Contact', render: (_, row) => (
+      <div>
+        <div style={{ fontSize: '13px' }}>{row.email || '—'}</div>
+        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{row.phone || ''}</div>
+      </div>
+    )},
+    { key: 'source', label: 'Source', render: val => (
+        <span style={{ fontSize: '12px', padding: '2px 8px', borderRadius: '12px', background: 'var(--bg-secondary)', color: 'var(--text-secondary)', fontWeight: 600 }}>
+          {val || 'Website'}
+        </span>
+      )
+    },
+    { key: 'status', label: 'Status', render: val => <Badge variant={val}>{val}</Badge> },
+    { key: 'createdAt', label: 'Added On', render: val => <span className="text-muted text-sm">{val}</span> }
+  ];
+
+  return (
+    <div className="leads-page slide-in-top">
+      <PageHeader 
+        title="Lead Pipeline" 
+        subtitle={`Track and convert your ${leads.length} leads.`}
+        action={() => handleOpenForm()}
+        actionText="Add Lead"
+      />
+
+      <div className="card">
+        <div className="card-header">
+          <FilterTabs 
+            tabs={['All', 'New', 'Contacted', 'Qualified', 'Lost']} 
+            activeTab={filterStatus} 
+            onTabChange={setFilterStatus}
+            counts={{
+              'All': leads.length,
+              'New': leads.filter(l => l.status === 'New').length,
+              'Contacted': leads.filter(l => l.status === 'Contacted').length,
+              'Qualified': leads.filter(l => l.status === 'Qualified').length,
+              'Lost': leads.filter(l => l.status === 'Lost').length,
+            }}
+          />
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <SearchBar value={searchText} onChange={setSearchText} placeholder="Search leads..." />
+            <button className="btn btn-ghost btn-sm" onClick={exportToCSV}>Export</button>
+          </div>
+        </div>
+        
+        <DataTable 
+          columns={columns}
+          data={filteredLeads}
+          onRowClick={setSelectedLead}
+          emptyTitle="Pipeline is empty"
+          emptyMessage="Add some leads to get started."
+          actions={(row) => (
+            <div style={{ display: 'flex' }}>
+              <button className="action-btn convert" onClick={() => handleConvertToCustomer(row)}>Convert</button>
+              <button className="action-btn edit" onClick={() => handleOpenForm(row)}>Edit</button>
+              <button className="action-btn delete" onClick={() => handleDelete(row.id, row.name)}>Delete</button>
+            </div>
+          )}
+        />
+      </div>
+
+      {/* Detail Panel */}
+      {selectedLead && (
+        <div className="card mt-20 slide-in-top">
+          <div className="card-header">
+            <span className="card-title">🎯 {selectedLead.name}</span>
+            <button className="btn btn-ghost btn-sm" onClick={() => setSelectedLead(null)}>Close</button>
+          </div>
+          <div className="card-body">
+            <div className="form-grid three-col">
+              <div>
+                <div className="form-label">Contact</div>
+                <div className="mt-4">{selectedLead.email || '—'}</div>
+                <div className="text-muted mt-4">{selectedLead.phone || '—'}</div>
+              </div>
+              <div>
+                <div className="form-label">Company & Source</div>
+                <div className="mt-4">{selectedLead.company}</div>
+                <div className="text-muted mt-4">{selectedLead.source}</div>
+              </div>
+              <div>
+                <div className="form-label">Status & Tracking</div>
+                <div className="mt-4"><Badge variant={selectedLead.status}>{selectedLead.status}</Badge></div>
+                <div className="text-muted mt-4">Added: {selectedLead.createdAt}</div>
+              </div>
+            </div>
+            <div className="mt-20 flex gap-12">
+               <button className="btn btn-success" onClick={() => handleConvertToCustomer(selectedLead)}>Convert to Customer</button>
+               <button className="btn btn-ghost" onClick={() => handleOpenForm(selectedLead)}>Edit Details</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add/Edit Modal */}
+      <FormModal 
+        isOpen={isModalOpen} 
+        onClose={() => setIsModalOpen(false)} 
+        title="Lead Details"
+        onSubmit={handleSave}
+        isEdit={!!editId}
+      >
+        <div className="form-grid">
+          <div className="form-group full-width">
+            <label className="form-label">Lead Name *</label>
+            <input className="form-input" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Jane Doe" autoFocus />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Email</label>
+            <input className="form-input" type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} placeholder="jane@example.com" />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Phone</label>
+            <input className="form-input" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} placeholder="+1 234 567 890" />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Company *</label>
+            <input className="form-input" value={formData.company} onChange={e => setFormData({...formData, company: e.target.value})} placeholder="Acme Corp" />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Source</label>
+            <select className="form-select" value={formData.source} onChange={e => setFormData({...formData, source: e.target.value})}>
+              <option value="Website">Website</option>
+              <option value="Referral">Referral</option>
+              <option value="Social Media">Social Media</option>
+              <option value="Cold Call">Cold Call</option>
+              <option value="Email Campaign">Email Campaign</option>
+              <option value="Trade Show">Trade Show</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div className="form-group full-width">
+            <label className="form-label">Status</label>
+            <select className="form-select" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})}>
+              <option value="New">New</option>
+              <option value="Contacted">Contacted</option>
+              <option value="Qualified">Qualified</option>
+              <option value="Lost">Lost</option>
+            </select>
+          </div>
+        </div>
+      </FormModal>
+
+      <ConfirmDialog {...confirmDialog.confirmConfig} isOpen={confirmDialog.isOpen} onClose={confirmDialog.close} />
+    </div>
+  );
+};
+
+export default Leads;

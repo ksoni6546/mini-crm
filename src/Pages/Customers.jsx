@@ -1,502 +1,298 @@
-import { useEffect, useState } from 'react'
+import React, { useState } from 'react';
+import { useLocalStorage } from '../hooks/useLocalStorage';
+import { useSettings } from '../hooks/useSettings';
+import { useToast } from '../contexts/ToastContext';
+import { useConfirm } from '../hooks/useConfirm';
+import { logActivity } from '../utils/activityLogger';
 
-function Customers() {
+import PageHeader from '../Components/PageHeader';
+import SearchBar from '../Components/SearchBar';
+import FilterTabs from '../Components/FilterTabs';
+import DataTable from '../Components/DataTable';
+import FormModal from '../Components/FormModal';
+import Badge from '../Components/Badge';
+import ConfirmDialog from '../Components/ConfirmDialog';
 
-const [customers, setCustomers] = useState([])
-const [loading, setLoading] = useState(true)
-const [error, setError] = useState('')
-const [searchText, setSearchText] = useState('')
-const [selectedCustomer, setSelectedCustomer] = useState(null)
-const [activityLog, setActivityLog] = useState([])
+const Customers = () => {
+  const [customers, setCustomers] = useLocalStorage('customers', []);
+  const [settings] = useSettings();
+  const toast = useToast();
+  const confirmDialog = useConfirm();
 
-// Form fields
-const [newName, setNewName] = useState('')
-const [newEmail, setNewEmail] = useState('')
-const [newPhone, setNewPhone] = useState('')
-const [newCompany, setNewCompany] = useState('')
-const [newStatus, setNewStatus] = useState('Active')
-const [newNote, setNewNote] = useState('')
-const [newPriority, setNewPriority] = useState('Medium')
-const [newFollowUp, setNewFollowUp] = useState('')
-const [editId, setEditId] = useState(null)
-const [showForm, setShowForm] = useState(false)
-const [filterPriority, setFilterPriority] = useState('All')
+  const [searchText, setSearchText] = useState('');
+  const [filterPriority, setFilterPriority] = useState('All');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editId, setEditId] = useState(null);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
 
-function normalizeCustomers(list) {
-return list.map(function (customer) {
-return {
-...customer,
-activity: customer.activity || [],
-priority: customer.priority || 'Medium',
-followUpDate: customer.followUpDate || ''
-}
-})
-}
+  // Form state
+  const [formData, setFormData] = useState({
+    name: '', email: '', phone: '', company: '', note: '', 
+    status: settings.defaultStatus || 'Active', 
+    priority: settings.defaultPriority || 'Medium', 
+    followUpDate: ''
+  });
 
-function loadSavedCustomers() {
-let saved = JSON.parse(localStorage.getItem('customers'))
-if (Array.isArray(saved)) return normalizeCustomers(saved)
-return null
-}
+  // Derived state
+  const alertCustomers = customers.filter(c => {
+    if (!c.followUpDate) return false;
+    const followUp = new Date(c.followUpDate);
+    const today = new Date();
+    followUp.setHours(0,0,0,0); today.setHours(0,0,0,0);
+    return followUp <= today;
+  });
 
-// Check if follow-up date is today or overdue
-function getFollowUpAlert(dateStr) {
-if (!dateStr) return null
-let today = new Date()
-let followUp = new Date(dateStr)
-today.setHours(0, 0, 0, 0)
-followUp.setHours(0, 0, 0, 0)
-let diff = (followUp - today) / (1000 * 60 * 60 * 24)
-if (diff < 0) return 'overdue'
-if (diff === 0) return 'today'
-if (diff <= 3) return 'soon'
-return null
-}
+  const filteredCustomers = customers.filter(c => {
+    const matchesSearch = c.name.toLowerCase().includes(searchText.toLowerCase()) || 
+                          (c.company && c.company.toLowerCase().includes(searchText.toLowerCase()));
+    const matchesPriority = filterPriority === 'All' || c.priority === filterPriority;
+    return matchesSearch && matchesPriority;
+  });
 
-useEffect(function () {
-let savedLogs = JSON.parse(localStorage.getItem('activityLog')) || []
-setActivityLog(savedLogs)
-let savedCustomers = loadSavedCustomers()
-if (savedCustomers !== null) {
-setCustomers(savedCustomers)
-setLoading(false)
-if (savedCustomers.length > 0) return
-}
-fetch('https://jsonplaceholder.typicode.com/users')
-.then(function (res) { return res.json() })
-.then(function (data) {
-let mapped = data.map(function (user) {
-return {
-...user,
-phone: user.phone || '',
-company: user.company?.name || '',
-status: 'Active',
-priority: 'Medium',
-followUpDate: '',
-note: '',
-activity: []
-}
-})
-setCustomers(mapped)
-setLoading(false)
-})
-.catch(function () {
-setError('Failed to load customers')
-setLoading(false)
-})
-}, [])
+  // Actions
+  const handleOpenForm = (customer = null) => {
+    if (customer) {
+      setFormData({ ...customer });
+      setEditId(customer.id);
+    } else {
+      setFormData({
+        name: '', email: '', phone: '', company: '', note: '', 
+        status: settings.defaultStatus || 'Active', 
+        priority: settings.defaultPriority || 'Medium', 
+        followUpDate: ''
+      });
+      setEditId(null);
+    }
+    setIsModalOpen(true);
+  };
 
-useEffect(function () {
-function handleUpdate() {
-let savedLogs = JSON.parse(localStorage.getItem('activityLog')) || []
-let savedCustomers = loadSavedCustomers() || []
-setActivityLog(savedLogs)
-setCustomers(savedCustomers)
-setSelectedCustomer(function (prev) {
-if (!prev) return prev
-return savedCustomers.find(function (x) { return x.id === prev.id }) || prev
-})
-}
-window.addEventListener('crm:storageUpdated', handleUpdate)
-window.addEventListener('storage', handleUpdate)
-return function () {
-window.removeEventListener('crm:storageUpdated', handleUpdate)
-window.removeEventListener('storage', handleUpdate)
-}
-}, [])
+  const handleSave = () => {
+    if (!formData.name.trim() || !formData.email.trim()) {
+      toast.warning('Name and Email are required.');
+      return;
+    }
 
-useEffect(function () {
-if (!loading) {
-try { localStorage.setItem('customers', JSON.stringify(customers)) } catch (e) {}
-}
-}, [customers, loading])
+    if (editId) {
+      const updated = customers.map(c => c.id === editId ? { ...formData, id: editId } : c);
+      setCustomers(updated);
+      logActivity('Customer', `Updated customer: ${formData.name}`);
+      toast.success('Customer updated successfully.');
+      if (selectedCustomer?.id === editId) setSelectedCustomer({ ...formData, id: editId });
+    } else {
+      const newCustomer = { ...formData, id: Date.now() };
+      setCustomers([...customers, newCustomer]);
+      logActivity('Customer', `Added new customer: ${formData.name}`);
+      toast.success('Customer added successfully.');
+    }
+    setIsModalOpen(false);
+  };
 
-// --- CSV Export ---
-function exportToCSV() {
-let headers = ['Name', 'Email', 'Phone', 'Company', 'Status', 'Priority', 'Follow-Up Date', 'Notes']
-let rows = customers.map(function (c) {
-return [
-c.name, c.email, c.phone || '',
-c.company || '', c.status,
-c.priority || 'Medium',
-c.followUpDate || '',
-(c.note || '').replace(/,/g, ' ')
-].join(',')
-})
-let csvContent = [headers.join(','), ...rows].join('\n')
-let blob = new Blob([csvContent], { type: 'text/csv' })
-let url = URL.createObjectURL(blob)
-let a = document.createElement('a')
-a.href = url
-a.download = 'customers.csv'
-a.click()
-URL.revokeObjectURL(url)
-}
+  const handleDelete = (id, name) => {
+    confirmDialog.confirm({
+      title: 'Delete Customer',
+      message: `Are you sure you want to delete ${name}? This action cannot be undone.`,
+      confirmText: 'Delete Customer',
+      onConfirm: () => {
+        setCustomers(customers.filter(c => c.id !== id));
+        logActivity('Customer', `Deleted customer: ${name}`);
+        toast.info('Customer deleted.');
+        if (selectedCustomer?.id === id) setSelectedCustomer(null);
+      }
+    });
+  };
 
-// --- CRUD ---
-function addCustomer() {
-if (newName.trim() === '' || newEmail.trim() === '') {
-alert('Please enter both name and email')
-return
-}
-let newCustomer = {
-id: Date.now(), name: newName, email: newEmail,
-phone: newPhone, company: newCompany, note: newNote,
-status: newStatus, priority: newPriority,
-followUpDate: newFollowUp, activity: []
-}
-let next = [...customers, newCustomer]
-setCustomers(next)
-try { localStorage.setItem('customers', JSON.stringify(next)); window.dispatchEvent(new Event('crm:storageUpdated')) } catch (e) {}
-clearForm()
-setShowForm(false)
-}
+  const exportToCSV = () => {
+    if (customers.length === 0) {
+      toast.warning('No customers to export.');
+      return;
+    }
+    const headers = ['Name', 'Email', 'Phone', 'Company', 'Status', 'Priority', 'Follow-Up Date', 'Notes'];
+    const rows = customers.map(c => [
+      `"${c.name}"`, `"${c.email}"`, `"${c.phone || ''}"`, `"${c.company || ''}"`, 
+      `"${c.status}"`, `"${c.priority}"`, `"${c.followUpDate || ''}"`, `"${(c.note || '').replace(/"/g, '""')}"`
+    ].join(','));
+    const csv = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'customers.csv'; a.click();
+    URL.revokeObjectURL(url);
+    toast.success('Export downloaded.');
+  };
 
-function editCustomer(customer) {
-setNewName(customer.name); setNewEmail(customer.email)
-setNewPhone(customer.phone || ''); setNewCompany(customer.company || '')
-setNewStatus(customer.status); setNewNote(customer.note || '')
-setNewPriority(customer.priority || 'Medium')
-setNewFollowUp(customer.followUpDate || '')
-setEditId(customer.id); setShowForm(true)
-}
+  // Table config
+  const columns = [
+    { key: 'name', label: 'Customer', render: (val, row) => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--primary-light)', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12px' }}>
+            {val.charAt(0).toUpperCase()}
+          </div>
+          <div>
+            <div style={{ fontWeight: 600 }}>{val}</div>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{row.email}</div>
+          </div>
+        </div>
+      )
+    },
+    { key: 'company', label: 'Company', render: val => val || '—' },
+    { key: 'priority', label: 'Priority', render: val => <Badge variant={val}>{val}</Badge> },
+    { key: 'status', label: 'Status', render: val => <Badge variant={val}>{val}</Badge> },
+    { key: 'followUpDate', label: 'Follow Up', render: val => {
+        if (!val) return '—';
+        const d = new Date(val); const t = new Date(); d.setHours(0,0,0,0); t.setHours(0,0,0,0);
+        const isOverdue = d < t; const isToday = d.getTime() === t.getTime();
+        return (
+          <span style={{ color: isOverdue ? 'var(--danger)' : isToday ? 'var(--warning)' : 'inherit', fontWeight: (isOverdue || isToday) ? 600 : 400 }}>
+            {val} {isOverdue ? '🚨' : isToday ? '⚡' : ''}
+          </span>
+        );
+      } 
+    }
+  ];
 
-function updateCustomer() {
-let updated = customers.map(function (c) {
-if (c.id === editId) {
-return { ...c, name: newName, email: newEmail, phone: newPhone,
-company: newCompany, note: newNote, status: newStatus,
-priority: newPriority, followUpDate: newFollowUp }
-}
-return c
-})
-setCustomers(updated)
-try { localStorage.setItem('customers', JSON.stringify(updated)); window.dispatchEvent(new Event('crm:storageUpdated')) } catch (e) {}
-clearForm(); setEditId(null); setShowForm(false)
-}
+  return (
+    <div className="customers-page slide-in-top">
+      <PageHeader 
+        title="Customers" 
+        subtitle={`Manage your ${customers.length} customer relationships.`}
+        action={() => handleOpenForm()}
+        actionText="Add Customer"
+      />
 
-function deleteCustomer(customerId) {
-let updated = customers.filter(function (c) { return c.id !== customerId })
-setCustomers(updated)
-if (selectedCustomer && selectedCustomer.id === customerId) setSelectedCustomer(null)
-try { localStorage.setItem('customers', JSON.stringify(updated)); window.dispatchEvent(new Event('crm:storageUpdated')) } catch (e) {}
-}
+      {alertCustomers.length > 0 && (
+        <div className="alert-banner warning">
+          <div style={{ fontSize: '24px' }}>⚠️</div>
+          <div>
+            <div style={{ fontWeight: 700, color: '#92400e', marginBottom: '2px' }}>Follow-Up Required</div>
+            <div style={{ fontSize: '13px', color: '#b45309' }}>
+              {alertCustomers.length} customer(s) require your attention today or are overdue.
+            </div>
+          </div>
+        </div>
+      )}
 
-function toggleStatus(customerId) {
-let updated = customers.map(function (c) {
-if (c.id === customerId) return { ...c, status: c.status === 'Active' ? 'Inactive' : 'Active' }
-return c
-})
-setCustomers(updated)
-try { localStorage.setItem('customers', JSON.stringify(updated)); window.dispatchEvent(new Event('crm:storageUpdated')) } catch (e) {}
-}
+      <div className="card">
+        <div className="card-header">
+          <FilterTabs 
+            tabs={['All', 'High', 'Medium', 'Low']} 
+            activeTab={filterPriority} 
+            onTabChange={setFilterPriority}
+            counts={{
+              'All': customers.length,
+              'High': customers.filter(c => c.priority === 'High').length,
+              'Medium': customers.filter(c => c.priority === 'Medium').length,
+              'Low': customers.filter(c => c.priority === 'Low').length,
+            }}
+          />
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <SearchBar value={searchText} onChange={setSearchText} placeholder="Search customers..." />
+            <button className="btn btn-ghost btn-sm" onClick={exportToCSV}>Export</button>
+          </div>
+        </div>
+        
+        <DataTable 
+          columns={columns}
+          data={filteredCustomers}
+          onRowClick={setSelectedCustomer}
+          emptyTitle="No customers found"
+          emptyMessage="Try adjusting your search or add a new customer."
+          actions={(row) => (
+            <div style={{ display: 'flex' }}>
+              <button className="action-btn edit" onClick={() => handleOpenForm(row)}>Edit</button>
+              <button className="action-btn delete" onClick={() => handleDelete(row.id, row.name)}>Delete</button>
+            </div>
+          )}
+        />
+      </div>
 
-function clearForm() {
-setNewName(''); setNewEmail(''); setNewPhone(''); setNewCompany('')
-setNewStatus('Active'); setNewNote(''); setNewPriority('Medium'); setNewFollowUp('')
-}
+      {/* Customer Detail Sidebar/Panel (Inline below table for now, styled nicer) */}
+      {selectedCustomer && (
+        <div className="card mt-20 slide-in-top">
+          <div className="card-header">
+            <span className="card-title">👤 {selectedCustomer.name}</span>
+            <button className="btn btn-ghost btn-sm" onClick={() => setSelectedCustomer(null)}>Close Details</button>
+          </div>
+          <div className="card-body">
+            <div className="form-grid">
+              <div>
+                <div className="form-label">Contact</div>
+                <div className="mt-4"><a href={`mailto:${selectedCustomer.email}`} style={{ color: 'var(--info)', fontWeight: 500 }}>{selectedCustomer.email}</a></div>
+                <div className="text-muted mt-4">{selectedCustomer.phone || 'No phone number'}</div>
+              </div>
+              <div>
+                <div className="form-label">Details</div>
+                <div className="mt-4"><strong>Company:</strong> {selectedCustomer.company || '—'}</div>
+                <div className="mt-4">
+                  <Badge variant={selectedCustomer.status}>{selectedCustomer.status}</Badge>
+                  <span style={{ margin: '0 8px' }}>•</span>
+                  <Badge variant={selectedCustomer.priority}>{selectedCustomer.priority} Priority</Badge>
+                </div>
+              </div>
+              <div className="full-width">
+                <div className="form-label">Notes</div>
+                <div style={{ background: 'var(--bg-secondary)', padding: '16px', borderRadius: 'var(--radius-sm)', marginTop: '8px', whiteSpace: 'pre-wrap' }}>
+                  {selectedCustomer.note || <span className="text-muted">No notes recorded.</span>}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
-function priorityBadge(p) {
-if (p === 'High') return 'badge badge-high'
-if (p === 'Low') return 'badge badge-low'
-return 'badge badge-medium'
-}
+      {/* Add/Edit Modal */}
+      <FormModal 
+        isOpen={isModalOpen} 
+        onClose={() => setIsModalOpen(false)} 
+        title="Customer Details"
+        onSubmit={handleSave}
+        isEdit={!!editId}
+      >
+        <div className="form-grid">
+          <div className="form-group">
+            <label className="form-label">Full Name *</label>
+            <input className="form-input" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Jane Doe" autoFocus />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Email *</label>
+            <input className="form-input" type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} placeholder="jane@example.com" />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Phone</label>
+            <input className="form-input" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} placeholder="+1 234 567 890" />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Company</label>
+            <input className="form-input" value={formData.company} onChange={e => setFormData({...formData, company: e.target.value})} placeholder="Acme Corp" />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Status</label>
+            <select className="form-select" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})}>
+              <option value="Active">Active</option>
+              <option value="Inactive">Inactive</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Priority</label>
+            <select className="form-select" value={formData.priority} onChange={e => setFormData({...formData, priority: e.target.value})}>
+              <option value="High">High</option>
+              <option value="Medium">Medium</option>
+              <option value="Low">Low</option>
+            </select>
+          </div>
+          <div className="form-group full-width">
+            <label className="form-label">Follow-Up Date</label>
+            <input className="form-input" type="date" value={formData.followUpDate} onChange={e => setFormData({...formData, followUpDate: e.target.value})} />
+          </div>
+          <div className="form-group full-width">
+            <label className="form-label">Notes</label>
+            <textarea className="form-textarea" value={formData.note} onChange={e => setFormData({...formData, note: e.target.value})} placeholder="Additional details..." />
+          </div>
+        </div>
+      </FormModal>
 
-if (loading) return <div className="loading-state">Loading Customers...</div>
-if (error) return <div className="loading-state">{error}</div>
+      <ConfirmDialog {...confirmDialog.confirmConfig} isOpen={confirmDialog.isOpen} onClose={confirmDialog.close} />
+    </div>
+  );
+};
 
-// Follow-up alerts — customers due today or overdue
-let alertCustomers = customers.filter(function (c) {
-let alert = getFollowUpAlert(c.followUpDate)
-return alert === 'today' || alert === 'overdue'
-})
-
-let filteredCustomers = customers.filter(function (c) {
-let matchSearch = c.name.toLowerCase().includes(searchText.toLowerCase()) ||
-(c.company || '').toLowerCase().includes(searchText.toLowerCase())
-let matchPriority = filterPriority === 'All' || c.priority === filterPriority
-return matchSearch && matchPriority
-})
-
-return (
-
-<div className="customers-page">
-
-{/* Page Header */}
-<div className="page-header">
-<div className="page-header-left">
-<h1>Customers</h1>
-<p>{customers.length} total — {customers.filter(c => c.status === 'Active').length} active</p>
-</div>
-<div style={{ display: 'flex', gap: 10 }}>
-<button className="btn btn-ghost" onClick={exportToCSV}>
-⬇️ Export CSV
-</button>
-<button
-className="btn btn-primary"
-onClick={function () { clearForm(); setEditId(null); setShowForm(!showForm) }}
->
-{showForm ? '✕ Cancel' : '+ Add Customer'}
-</button>
-</div>
-</div>
-
-{/* Follow-Up Alert Banner */}
-{alertCustomers.length > 0 && (
-<div style={{
-background: '#fef3c7', border: '1px solid #f59e0b',
-borderRadius: 10, padding: '12px 18px', marginBottom: 20,
-display: 'flex', alignItems: 'center', gap: 12
-}}>
-<span style={{ fontSize: 20 }}>⚠️</span>
-<div>
-<div style={{ fontWeight: 700, fontSize: 14, color: '#92400e' }}>
-Follow-Up Alert — {alertCustomers.length} customer{alertCustomers.length > 1 ? 's' : ''} need attention!
-</div>
-<div style={{ fontSize: 13, color: '#b45309', marginTop: 3 }}>
-{alertCustomers.map(function (c) { return c.name }).join(', ')}
-</div>
-</div>
-</div>
-)}
-
-{/* Add / Edit Form */}
-{showForm && (
-<div className="card mb-20">
-<div className="card-header">
-<span className="card-title">{editId ? '✏️ Update Customer' : '➕ New Customer'}</span>
-</div>
-<div className="card-body">
-<div className="form-grid">
-
-<div className="form-group">
-<label className="form-label">Full Name *</label>
-<input className="form-input" type="text" placeholder="e.g. Rahul Sharma"
-value={newName} onChange={function (e) { setNewName(e.target.value) }} />
-</div>
-
-<div className="form-group">
-<label className="form-label">Email Address *</label>
-<input className="form-input" type="email" placeholder="e.g. rahul@company.com"
-value={newEmail} onChange={function (e) { setNewEmail(e.target.value) }} />
-</div>
-
-<div className="form-group">
-<label className="form-label">Phone Number</label>
-<input className="form-input" type="text" placeholder="+91 98765 43210"
-value={newPhone} onChange={function (e) { setNewPhone(e.target.value) }} />
-</div>
-
-<div className="form-group">
-<label className="form-label">Company</label>
-<input className="form-input" type="text" placeholder="e.g. Tata Consultancy"
-value={newCompany} onChange={function (e) { setNewCompany(e.target.value) }} />
-</div>
-
-<div className="form-group">
-<label className="form-label">Status</label>
-<select className="form-select" value={newStatus}
-onChange={function (e) { setNewStatus(e.target.value) }}>
-<option value="Active">Active</option>
-<option value="Inactive">Inactive</option>
-</select>
-</div>
-
-<div className="form-group">
-<label className="form-label">Priority</label>
-<select className="form-select" value={newPriority}
-onChange={function (e) { setNewPriority(e.target.value) }}>
-<option value="High">High</option>
-<option value="Medium">Medium</option>
-<option value="Low">Low</option>
-</select>
-</div>
-
-<div className="form-group">
-<label className="form-label">Follow-Up Date</label>
-<input className="form-input" type="date" value={newFollowUp}
-onChange={function (e) { setNewFollowUp(e.target.value) }} />
-</div>
-
-<div className="form-group full-width">
-<label className="form-label">Notes</label>
-<textarea className="form-textarea" placeholder="Any notes about this customer..."
-value={newNote} onChange={function (e) { setNewNote(e.target.value) }} />
-</div>
-
-</div>
-<div style={{ marginTop: 8 }}>
-{editId
-? <button className="btn btn-warning" onClick={updateCustomer}>✏️ Update Customer</button>
-: <button className="btn btn-primary" onClick={addCustomer}>➕ Add Customer</button>
-}
-</div>
-</div>
-</div>
-)}
-
-{/* Priority Filter Tabs */}
-<div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
-{['All', 'High', 'Medium', 'Low'].map(function (tab) {
-return (
-<button key={tab} onClick={function () { setFilterPriority(tab) }}
-style={{
-padding: '7px 16px', borderRadius: 8, border: 'none',
-fontSize: 13, fontWeight: 600, cursor: 'pointer',
-fontFamily: 'var(--font-main)',
-background: filterPriority === tab ? 'var(--primary)' : 'white',
-color: filterPriority === tab ? 'white' : 'var(--text-secondary)',
-boxShadow: '0 1px 3px rgba(0,0,0,0.08)', transition: 'all 0.15s ease'
-}}
->
-{tab} ({tab === 'All' ? customers.length : customers.filter(c => c.priority === tab).length})
-</button>
-)
-})}
-</div>
-
-{/* Customers Table */}
-<div className="card">
-<div className="card-header">
-<span className="card-title">All Customers</span>
-<div className="search-bar">
-<input type="text" placeholder="Search by name or company..."
-value={searchText} onChange={function (e) { setSearchText(e.target.value) }} />
-</div>
-</div>
-<div className="table-wrapper">
-<table>
-<thead>
-<tr>
-<th>#</th><th>Name</th><th>Email</th><th>Phone</th>
-<th>Company</th><th>Priority</th><th>Follow-Up</th>
-<th>Status</th><th>Actions</th>
-</tr>
-</thead>
-<tbody>
-{filteredCustomers.length === 0 ? (
-<tr>
-<td colSpan="9" style={{ textAlign: 'center', padding: 32, color: 'var(--text-muted)' }}>
-No customers found
-</td>
-</tr>
-) : (
-filteredCustomers.map(function (customer, index) {
-let alert = getFollowUpAlert(customer.followUpDate)
-return (
-<tr key={customer.id}
-onClick={function () { setSelectedCustomer(customer) }}
-style={{ background: alert === 'overdue' ? '#fff5f5' : alert === 'today' ? '#fffbeb' : 'transparent' }}
->
-<td style={{ color: 'var(--text-muted)', fontSize: 13 }}>{index + 1}</td>
-<td style={{ fontWeight: 600 }}>{customer.name}</td>
-<td style={{ color: 'var(--text-secondary)' }}>{customer.email}</td>
-<td style={{ color: 'var(--text-secondary)' }}>{customer.phone || '—'}</td>
-<td>{customer.company || '—'}</td>
-<td><span className={priorityBadge(customer.priority)}>{customer.priority || 'Medium'}</span></td>
-<td style={{ fontSize: 13 }}>
-{customer.followUpDate ? (
-<span style={{
-color: alert === 'overdue' ? 'var(--danger)' : alert === 'today' ? 'var(--warning)' : 'var(--text-secondary)',
-fontWeight: (alert === 'overdue' || alert === 'today') ? 700 : 400
-}}>
-{customer.followUpDate}
-{alert === 'overdue' && ' 🚨'}
-{alert === 'today' && ' ⚡'}
-{alert === 'soon' && ' 🔔'}
-</span>
-) : '—'}
-</td>
-<td>
-<span className={customer.status === 'Active' ? 'badge badge-active' : 'badge badge-inactive'}>
-{customer.status}
-</span>
-</td>
-<td onClick={function (e) { e.stopPropagation() }}>
-<button className="edit-btn" onClick={function () { editCustomer(customer) }}>Edit</button>
-<button className="edit-btn" style={{ background: 'var(--info)' }}
-onClick={function () { toggleStatus(customer.id) }}>Toggle</button>
-<button className="delete-btn" onClick={function () { deleteCustomer(customer.id) }}>Delete</button>
-</td>
-</tr>
-)
-})
-)}
-</tbody>
-</table>
-</div>
-</div>
-
-{/* Customer Details Panel */}
-{selectedCustomer && (
-<div className="card" style={{ marginTop: 20 }}>
-<div className="card-header">
-<span className="card-title">👤 {selectedCustomer.name} — Details</span>
-<button className="btn btn-ghost btn-sm" onClick={function () { setSelectedCustomer(null) }}>✕ Close</button>
-</div>
-<div className="card-body">
-<div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-<div>
-<div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>Email</div>
-<div style={{ fontWeight: 500 }}>{selectedCustomer.email}</div>
-</div>
-<div>
-<div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>Phone</div>
-<div style={{ fontWeight: 500 }}>{selectedCustomer.phone || '—'}</div>
-</div>
-<div>
-<div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>Company</div>
-<div style={{ fontWeight: 500 }}>{selectedCustomer.company || '—'}</div>
-</div>
-<div>
-<div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>Priority</div>
-<span className={priorityBadge(selectedCustomer.priority)}>{selectedCustomer.priority || 'Medium'}</span>
-</div>
-<div>
-<div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>Follow-Up Date</div>
-<div style={{ fontWeight: 500 }}>{selectedCustomer.followUpDate || 'Not set'}</div>
-</div>
-<div>
-<div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>Status</div>
-<span className={selectedCustomer.status === 'Active' ? 'badge badge-active' : 'badge badge-inactive'}>
-{selectedCustomer.status}
-</span>
-</div>
-{selectedCustomer.note && (
-<div style={{ gridColumn: '1 / -1' }}>
-<div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>Notes</div>
-<div style={{ fontSize: 14, color: 'var(--text-secondary)', background: 'var(--bg)', padding: '10px 14px', borderRadius: 8 }}>
-{selectedCustomer.note}
-</div>
-</div>
-)}
-</div>
-</div>
-</div>
-)}
-
-{/* Recent Activity */}
-{activityLog.length > 0 && (
-<div className="card" style={{ marginTop: 20 }}>
-<div className="card-header"><span className="card-title">🕐 Recent Activity</span></div>
-<div className="card-body">
-<ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 8 }}>
-{activityLog.slice(0, 5).map(function (log) {
-return (
-<li key={log.id} style={{ fontSize: 13, color: 'var(--text-secondary)', padding: '8px 12px', background: 'var(--bg)', borderRadius: 8 }}>
-{log.time} — {log.message}
-</li>
-)
-})}
-</ul>
-</div>
-</div>
-)}
-
-</div>
-
-)
-
-}
-
-export default Customers
+export default Customers;
