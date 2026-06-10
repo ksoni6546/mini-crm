@@ -32,6 +32,25 @@ return (
 )
 }
 
+function IconTasks() {
+return (
+<svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+<path d="M9 11l3 3L22 4" />
+<path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7" />
+<path d="M7 10V4a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v6" />
+</svg>
+)
+}
+
+function IconDeals() {
+return (
+<svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+    <line x1="12" y1="1" x2="12" y2="23" />
+    <path d="M17 5H9.2a3 3 0 0 0-2.12.88L3 9l4.08 3.12A3 3 0 0 0 9.2 13H17a3 3 0 0 0 0-6z" />
+</svg>
+)
+}
+
 function IconSettings() {
 return (
 <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -46,6 +65,8 @@ const navLinks = [
 { to: '/', label: 'Dashboard', Icon: IconDashboard },
 { to: '/customers', label: 'Customers', Icon: IconCustomers },
 { to: '/leads', label: 'Leads', Icon: IconLeads },
+{ to: '/tasks', label: 'Tasks', Icon: IconTasks },
+{ to: '/deals', label: 'Deals', Icon: IconDeals },
 { to: '/settings', label: 'Settings', Icon: IconSettings },
 ]
 

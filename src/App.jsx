@@ -2,6 +2,8 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import Dashboard from './Pages/Dashboard'
 import Customers from './Pages/Customers'
 import Leads from './Pages/Leads'
+import Tasks from './Pages/Tasks'
+import Deals from './Pages/Deals'
 import Settings from './Pages/Settings'
 import Sidebar from './Components/Sidebar'
 import './App.css'
@@ -34,6 +36,16 @@ element={<Customers />}
 <Route
 path="/leads"
 element={<Leads />}
+/>
+
+<Route
+path="/tasks"
+element={<Tasks />}
+/>
+
+<Route
+path="/deals"
+element={<Deals />}
 />
 
 <Route
